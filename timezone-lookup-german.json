@@ -1,0 +1,88 @@
+{
+  "name": "Timezone Lookup (German)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"Geburtsort\": \"string\",\n  \"Geburtsland\": \"string\"\n}"
+      },
+      "id": "subworkflow-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const countryMap = {\n  'deutschland': 'DE',\n  'germany': 'DE',\n  'schweiz': 'CH',\n  'switzerland': 'CH',\n  'österreich': 'AT',\n  'austria': 'AT',\n  'frankreich': 'FR',\n  'france': 'FR',\n  'italien': 'IT',\n  'italy': 'IT',\n  'spanien': 'ES',\n  'spain': 'ES',\n  'niederlande': 'NL',\n  'niederland': 'NL',\n  'netherlands': 'NL',\n  'belgien': 'BE',\n  'belgium': 'BE',\n  'polen': 'PL',\n  'poland': 'PL',\n  'tschechien': 'CZ',\n  'czech republic': 'CZ',\n  'ungarn': 'HU',\n  'hungary': 'HU',\n  'vereinigtes königreich': 'GB',\n  'großbritannien': 'GB',\n  'united kingdom': 'GB',\n  'usa': 'US',\n  'vereinigte staaten': 'US',\n  'united states': 'US',\n  'kasachstan': 'KZ',\n  'kazakhstan': 'KZ',\n  'türkei': 'TR',\n  'turkey': 'TR',\n  'kosovo': 'XK',\n  'brasilien': 'BR',\n  'brazil': 'BR',\n  'irland': 'IE',\n  'ireland': 'IE',\n  'portugal': 'PT',\n  'griechenland': 'GR',\n  'greece': 'GR',\n  'schweden': 'SE',\n  'sweden': 'SE',\n  'norwegen': 'NO',\n  'norway': 'NO',\n  'dänemark': 'DK',\n  'denmark': 'DK',\n  'finnland': 'FI',\n  'finland': 'FI',\n  'russland': 'RU',\n  'russia': 'RU',\n  'ukraine': 'UA',\n  'rumänien': 'RO',\n  'romania': 'RO',\n  'kroatien': 'HR',\n  'croatia': 'HR',\n  'serbien': 'RS',\n  'serbia': 'RS',\n  'slowenien': 'SI',\n  'slovenia': 'SI',\n  'slowakei': 'SK',\n  'slovakia': 'SK',\n  'bulgarien': 'BG',\n  'bulgaria': 'BG',\n  'kanada': 'CA',\n  'canada': 'CA',\n  'mexiko': 'MX',\n  'mexico': 'MX',\n  'australien': 'AU',\n  'australia': 'AU',\n  'japan': 'JP',\n  'china': 'CN',\n  'indien': 'IN',\n  'india': 'IN'\n};\n\nconst data = $input.first().json;\nconst country = data.country || data.Geburtsland || '';\nconst countryLower = country.toLowerCase().trim();\nconst countryCode = countryMap[countryLower] || country.toUpperCase().slice(0, 2);\n\nreturn [{\n  json: {\n    city: data.city || data.Geburtsort,\n    country: country,\n    countryCode: countryCode\n  }\n}];"
+      },
+      "id": "map-country",
+      "name": "Map Country Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://api.geonames.org/searchJSON?q={{ encodeURIComponent($json.city) }}&country={{ $json.countryCode }}&maxRows=1&username=jksr",
+        "options": {}
+      },
+      "id": "search-city",
+      "name": "Search City",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://api.geonames.org/timezoneJSON?lat={{ $json.geonames[0].lat }}&lng={{ $json.geonames[0].lng }}&username=jksr",
+        "options": {}
+      },
+      "id": "get-timezone",
+      "name": "Get Timezone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Map Country Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Country Code": {
+      "main": [
+        [
+          {
+            "node": "Search City",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search City": {
+      "main": [
+        [
+          {
+            "node": "Get Timezone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

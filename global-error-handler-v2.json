@@ -1,0 +1,121 @@
+{
+  "name": "Global Error Handler v2",
+  "nodes": [
+    {
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -176
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -176
+      ],
+      "parameters": {
+        "jsCode": "const errorData = $input.all()[0].json;\nconst executionData = Array.isArray(errorData) ? errorData[0] : errorData;\nconst execution = executionData.execution;\nconst workflow = executionData.workflow;\nconst error = execution.error;\n\n// Extract all available info\nconst workflowName = workflow?.name || 'Unknown Workflow';\nconst workflowId = workflow?.id || '';\nconst executionId = execution?.id || 'Unknown';\nconst executionUrl = execution?.url || '';\nconst executionMode = execution?.mode || 'unknown';\n\nconst failedNode = error?.node?.name || 'Unknown Node';\nconst nodeType = error?.node?.type?.replace('n8n-nodes-base.', '') || 'unknown';\nconst errorType = error?.name || 'Unknown Error';\nconst errorMessage = error?.message || 'No error message available';\nconst timestamp = error?.timestamp || Date.now();\nconst itemIndex = error?.context?.itemIndex ?? error?.errorResponse?.context?.itemIndex;\n\n// Format for ntfy\nconst ntfyMessage = [\n  `Node: ${failedNode} (${nodeType})`,\n  `Error: ${errorType}`,\n  '',\n  errorMessage,\n  '',\n  itemIndex !== undefined ? `Item index: ${itemIndex}` : null,\n  `Mode: ${executionMode}`,\n  `Execution: ${executionId}`\n].filter(Boolean).join('\\n');\n\nconst ntfyTitle = `${workflowName}`;\nconst ntfyTags = errorType.includes('timeout') ? 'hourglass,warning'\n  : errorType.includes('Authentication') ? 'lock,warning'\n  : errorType.includes('rate') ? 'snail,warning'\n  : 'rotating_light,warning';\n\nreturn [{\n  json: {\n    ntfy: {\n      title: ntfyTitle,\n      message: ntfyMessage,\n      click: executionUrl,\n      tags: ntfyTags,\n      priority: 'high'\n    },\n    slack: {\n      text: ':warning: N8N Workflow Error Alert',\n      blocks: [\n        {\n          type: 'header',\n          text: { type: 'plain_text', text: 'Workflow Execution Failed' }\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Workflow:*\\n' + workflowName },\n            { type: 'mrkdwn', text: '*Execution ID:*\\n' + executionId },\n            { type: 'mrkdwn', text: '*Failed Node:*\\n' + failedNode },\n            { type: 'mrkdwn', text: '*Node Type:*\\n' + nodeType }\n          ]\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Error Type:*\\n' + errorType },\n            { type: 'mrkdwn', text: '*Mode:*\\n' + executionMode }\n          ]\n        },\n        {\n          type: 'section',\n          text: { type: 'mrkdwn', text: '*Error Message:*\\n`' + errorMessage + '`' }\n        },\n        ...(executionUrl ? [{\n          type: 'actions',\n          elements: [{\n            type: 'button',\n            text: { type: 'plain_text', text: 'View Execution' },\n            url: executionUrl,\n            style: 'primary'\n          }]\n        }] : []),\n        {\n          type: 'context',\n          elements: [{\n            type: 'mrkdwn',\n            text: 'Timestamp: <!date^' + Math.floor(timestamp / 1000) + '^{date_num} {time_secs}|' + new Date(timestamp).toISOString() + '>'\n          }]\n        }\n      ]\n    }\n  }\n}];\n"
+      }
+    },
+    {
+      "name": "Ntfy Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        -304
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ntfy.kaiserlich.dev/big_alerts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "=[BIG] {{ $json.ntfy.title }}"
+            },
+            {
+              "name": "Priority",
+              "value": "={{ $json.ntfy.priority }}"
+            },
+            {
+              "name": "Tags",
+              "value": "={{ $json.ntfy.tags }}"
+            },
+            {
+              "name": "Click",
+              "value": "={{ $json.ntfy.click }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ $json.ntfy.message }}",
+        "options": {}
+      }
+    },
+    {
+      "name": "Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        -80
+      ],
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C08MJSJAB8U",
+          "mode": "list",
+          "cachedResultName": "big-monitoring"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ $json.slack }}",
+        "otherOptions": {}
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Ntfy Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "name": "Monitor - Missing Error Handlers",
+  "nodes": [
+    {
+      "name": "Every 2 mins (testing)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -608,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Active Workflows",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "filters": {},
+        "requestOptions": {}
+      }
+    },
+    {
+      "name": "Check Error Handlers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const workflows = $input.all().map(i => i.json);\nconst skipTag = 'skip-monitoring';\nconst triggerTypes = [\n  'webhook', 'scheduletrigger', 'manualtrigger', 'errortrigger',\n  'emailtrigger', 'outlooktrigger', 'gmailtrigger', 'imaptrigger',\n  'slacktrigger', 'telegramtrigger', 'formtrigger', 'chattrigger'\n];\n\nconst missing = [];\nlet configuredCount = 0;\n\nfor (const wf of workflows) {\n  // Skip inactive workflows\n  if (!wf.active) continue;\n\n  // Skip archived workflows\n  if (wf.isArchived) continue;\n\n  // Skip workflows with skip-monitoring tag\n  const tags = wf.tags?.map(t => t.name?.toLowerCase() || t.toLowerCase()) || [];\n  if (tags.includes(skipTag)) continue;\n\n  // Check if it has a trigger (top-level) or is a subworkflow\n  const hasTrigger = wf.nodes?.some(n => triggerTypes.some(t => n.type?.toLowerCase().includes(t)));\n  if (!hasTrigger) continue;\n\n  if (wf.settings?.errorWorkflow) {\n    configuredCount++;\n  } else {\n    missing.push(wf.name);\n  }\n}\n\nreturn [{ json: { missing, missingCount: missing.length, configuredCount } }];\n"
+      }
+    },
+    {
+      "name": "Any Missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.missingCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "name": "Stop and Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -96
+      ],
+      "parameters": {
+        "errorMessage": "={{ $json.missingCount }} workflow(s) missing error handlers:\n• {{ $json.missing.join('\\n• ') }}"
+      }
+    },
+    {
+      "name": "All Good",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        208,
+        112
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 2 mins (testing)": {
+      "main": [
+        [
+          {
+            "node": "Get Active Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Workflows": {
+      "main": [
+        [
+          {
+            "node": "Check Error Handlers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Error Handlers": {
+      "main": [
+        [
+          {
+            "node": "Any Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Missing?": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Good",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
