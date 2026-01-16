@@ -101,10 +101,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Format alert message\nconst data = $input.first().json;\nconst deprecated = data.deprecatedModels;\n\nlet message = `⚠️ **OpenRouter Model Alert**\\n\\n`;\nmessage += `Found ${deprecated.length} model(s) that may no longer be available on OpenRouter:\\n\\n`;\n\nfor (const model of deprecated) {\n  message += `• **${model.model}**\\n`;\n  message += `  └ Workflow: ${model.workflowName} (${model.workflowId})\\n`;\n  message += `  └ Node: ${model.nodeName} (${model.nodeType})\\n\\n`;\n}\n\nmessage += `\\n---\\nScanned ${data.summary.totalWorkflows} workflows.`;\nmessage += `\\nOpenRouter currently has ${data.summary.availableOnOpenRouter} models available.`;\n\nreturn [{\n  json: {\n    message,\n    deprecatedCount: deprecated.length,\n    deprecatedModels: deprecated\n  }\n}];"
+        "jsCode": "// Throw error so global error handler picks it up\nconst data = $input.first().json;\nconst deprecated = data.deprecatedModels;\n\nlet message = `Found ${deprecated.length} model(s) no longer available on OpenRouter:\\n\\n`;\n\nfor (const model of deprecated) {\n  message += `• ${model.model}\\n`;\n  message += `  Workflow: ${model.workflowName} (${model.workflowId})\\n`;\n  message += `  Node: ${model.nodeName} (${model.nodeType})\\n\\n`;\n}\n\nmessage += `Scanned ${data.summary.totalWorkflows} workflows. OpenRouter has ${data.summary.availableOnOpenRouter} models.`;\n\nthrow new Error(message);"
       },
       "id": "format-alert",
-      "name": "Format Alert Message",
+      "name": "Throw Deprecation Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1320, 0]
@@ -203,7 +203,7 @@
       "main": [
         [
           {
-            "node": "Format Alert Message",
+            "node": "Throw Deprecation Error",
             "type": "main",
             "index": 0
           }
