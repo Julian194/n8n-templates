@@ -101,13 +101,23 @@
     },
     {
       "parameters": {
-        "jsCode": "// Throw error so global error handler picks it up\nconst data = $input.first().json;\nconst deprecated = data.deprecatedModels;\n\nlet message = `Found ${deprecated.length} model(s) no longer available on OpenRouter:\\n\\n`;\n\nfor (const model of deprecated) {\n  message += `• ${model.model}\\n`;\n  message += `  Workflow: ${model.workflowName} (${model.workflowId})\\n`;\n  message += `  Node: ${model.nodeName} (${model.nodeType})\\n\\n`;\n}\n\nmessage += `Scanned ${data.summary.totalWorkflows} workflows. OpenRouter has ${data.summary.availableOnOpenRouter} models.`;\n\nthrow new Error(message);"
+        "jsCode": "// Format error message for Stop and Error node\nconst data = $input.first().json;\nconst deprecated = data.deprecatedModels;\n\nlet message = `Found ${deprecated.length} model(s) no longer available on OpenRouter:\\n\\n`;\n\nfor (const model of deprecated) {\n  message += `• ${model.model}\\n`;\n  message += `  Workflow: ${model.workflowName} (${model.workflowId})\\n`;\n  message += `  Node: ${model.nodeName} (${model.nodeType})\\n\\n`;\n}\n\nmessage += `Scanned ${data.summary.totalWorkflows} workflows. OpenRouter has ${data.summary.availableOnOpenRouter} models.`;\n\nreturn [{ json: { message } }];"
       },
       "id": "format-alert",
-      "name": "Throw Deprecation Error",
+      "name": "Format Error Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ $json.message }}"
+      },
+      "id": "stop-error",
+      "name": "Stop and Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1540, 0]
     },
     {
       "parameters": {
@@ -121,7 +131,7 @@
     },
     {
       "parameters": {
-        "content": "## OpenRouter Model Availability Monitor\n\nThis workflow scans all workflows on this n8n instance for OpenRouter model references and checks if they're still available.\n\n### No Setup Required\n\nUses native n8n node - no API credentials needed.\n\n### Connect Notification\n\nAdd a notification node (Slack, Email, Discord) to the \"Format Alert Message\" output.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai API\n- OpenAI nodes that might be using OpenRouter (model IDs with /)",
+        "content": "## OpenRouter Model Availability Monitor\n\nScans all workflows for OpenRouter model references and checks if they're still available.\n\n### No Setup Required\n\nUses native n8n node - no credentials needed.\n\n### Error Handling\n\nUses Stop and Error node when deprecated models found - triggers your error workflow.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai\n- OpenAI nodes with model IDs containing /",
         "height": 340,
         "width": 360
       },
@@ -203,7 +213,7 @@
       "main": [
         [
           {
-            "node": "Throw Deprecation Error",
+            "node": "Format Error Message",
             "type": "main",
             "index": 0
           }
@@ -211,6 +221,17 @@
         [
           {
             "node": "All Models OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Message": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
             "type": "main",
             "index": 0
           }
