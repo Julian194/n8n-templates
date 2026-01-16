@@ -28,36 +28,19 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "={{ $env.N8N_API_URL || 'http://localhost:5678' }}/api/v1/workflows",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "limit",
-              "value": "500"
-            }
-          ]
-        },
-        "options": {}
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true
       },
       "id": "get-workflows",
       "name": "Get All Workflows",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [220, 100],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "n8n-api-key",
-          "name": "n8n API Key"
-        }
-      }
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [220, 100]
     },
     {
       "parameters": {
-        "jsCode": "// Extract OpenRouter model references from all workflows\nconst workflows = $input.first().json.data || [];\nconst modelsFound = [];\n\nfor (const workflow of workflows) {\n  if (!workflow.nodes) continue;\n  \n  for (const node of workflow.nodes) {\n    // Check LangChain OpenRouter nodes\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenRouter') {\n      const model = node.parameters?.model;\n      if (model) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'LangChain OpenRouter'\n        });\n      }\n    }\n    \n    // Check HTTP Request nodes calling OpenRouter API\n    if (node.type === 'n8n-nodes-base.httpRequest') {\n      const url = node.parameters?.url || '';\n      if (url.includes('openrouter.ai')) {\n        // Extract model from JSON body\n        const jsonBody = node.parameters?.jsonBody || '';\n        const modelMatch = jsonBody.match(/[\"']model[\"']\\s*:\\s*[\"']([^\"']+)[\"']/);\n        if (modelMatch) {\n          modelsFound.push({\n            model: modelMatch[1],\n            workflowId: workflow.id,\n            workflowName: workflow.name,\n            nodeName: node.name,\n            nodeType: 'HTTP Request'\n          });\n        }\n      }\n    }\n    \n    // Check OpenAI nodes with OpenRouter base URL in credentials\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi') {\n      const model = node.parameters?.model;\n      // Flag these for manual review - might be using OpenRouter\n      if (model && model.includes('/')) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'OpenAI (possible OpenRouter)'\n        });\n      }\n    }\n  }\n}\n\n// Deduplicate models\nconst uniqueModels = [...new Set(modelsFound.map(m => m.model))];\n\nreturn [{\n  json: {\n    totalWorkflows: workflows.length,\n    modelsFound,\n    uniqueModels\n  }\n}];"
+        "jsCode": "// Extract OpenRouter model references from all workflows\nconst workflows = $input.all().map(i => i.json);\nconst modelsFound = [];\n\nfor (const workflow of workflows) {\n  if (!workflow.nodes) continue;\n  \n  for (const node of workflow.nodes) {\n    // Check LangChain OpenRouter nodes\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenRouter') {\n      const model = node.parameters?.model;\n      if (model) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'LangChain OpenRouter'\n        });\n      }\n    }\n    \n    // Check HTTP Request nodes calling OpenRouter API\n    if (node.type === 'n8n-nodes-base.httpRequest') {\n      const url = node.parameters?.url || '';\n      if (url.includes('openrouter.ai')) {\n        // Extract model from JSON body\n        const jsonBody = node.parameters?.jsonBody || '';\n        const modelMatch = jsonBody.match(/[\"']model[\"']\\s*:\\s*[\"']([^\"']+)[\"']/);\n        if (modelMatch) {\n          modelsFound.push({\n            model: modelMatch[1],\n            workflowId: workflow.id,\n            workflowName: workflow.name,\n            nodeName: node.name,\n            nodeType: 'HTTP Request'\n          });\n        }\n      }\n    }\n    \n    // Check OpenAI nodes with OpenRouter base URL in credentials\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi') {\n      const model = node.parameters?.model;\n      // Flag these for manual review - might be using OpenRouter\n      if (model && model.includes('/')) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'OpenAI (possible OpenRouter)'\n        });\n      }\n    }\n  }\n}\n\n// Deduplicate models\nconst uniqueModels = [...new Set(modelsFound.map(m => m.model))];\n\nreturn [{\n  json: {\n    totalWorkflows: workflows.length,\n    modelsFound,\n    uniqueModels\n  }\n}];"
       },
       "id": "extract-models",
       "name": "Extract OpenRouter Models",
@@ -138,8 +121,8 @@
     },
     {
       "parameters": {
-        "content": "## OpenRouter Model Availability Monitor\n\nThis workflow scans all workflows on this n8n instance for OpenRouter model references and checks if they're still available.\n\n### Setup Required\n\n1. **Create HTTP Header Auth credential** named \"n8n API Key\":\n   - Header Name: `X-N8N-API-KEY`\n   - Header Value: Your n8n API key\n\n2. **Set environment variable** (optional):\n   - `N8N_API_URL`: Base URL of your n8n instance (defaults to http://localhost:5678)\n\n3. **Connect notification node** to \"Format Alert Message\" output:\n   - Slack, Email, Discord, etc.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai API\n- OpenAI nodes that might be using OpenRouter (model IDs with /)",
-        "height": 420,
+        "content": "## OpenRouter Model Availability Monitor\n\nThis workflow scans all workflows on this n8n instance for OpenRouter model references and checks if they're still available.\n\n### No Setup Required\n\nUses native n8n node - no API credentials needed.\n\n### Connect Notification\n\nAdd a notification node (Slack, Email, Discord) to the \"Format Alert Message\" output.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai API\n- OpenAI nodes that might be using OpenRouter (model IDs with /)",
+        "height": 340,
         "width": 360
       },
       "id": "sticky-note",
