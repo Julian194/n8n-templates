@@ -131,8 +131,8 @@
     },
     {
       "parameters": {
-        "content": "## OpenRouter Model Availability Monitor\n\nScans all workflows for OpenRouter model references and checks if they're still available.\n\n### No Setup Required\n\nUses native n8n node - no credentials needed.\n\n### Error Handling\n\nUses Stop and Error node when deprecated models found - triggers your error workflow.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai\n- OpenAI nodes with model IDs containing /",
-        "height": 340,
+        "content": "## OpenRouter Model Availability Monitor\n\nScans all workflows for OpenRouter model references and checks if they're still available.\n\n### Setup\n\n1. Set Error Workflow in settings to your error handler\n2. Adjust schedule as needed (default: weekly)\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai\n- OpenAI nodes with model IDs containing /",
+        "height": 300,
         "width": 360
       },
       "id": "sticky-note",
