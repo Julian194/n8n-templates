@@ -1,0 +1,250 @@
+{
+  "name": "OpenRouter Model Availability Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1]
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Weekly Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.N8N_API_URL || 'http://localhost:5678' }}/api/v1/workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "500"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-workflows",
+      "name": "Get All Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "n8n-api-key",
+          "name": "n8n API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract OpenRouter model references from all workflows\nconst workflows = $input.first().json.data || [];\nconst modelsFound = [];\n\nfor (const workflow of workflows) {\n  if (!workflow.nodes) continue;\n  \n  for (const node of workflow.nodes) {\n    // Check LangChain OpenRouter nodes\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenRouter') {\n      const model = node.parameters?.model;\n      if (model) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'LangChain OpenRouter'\n        });\n      }\n    }\n    \n    // Check HTTP Request nodes calling OpenRouter API\n    if (node.type === 'n8n-nodes-base.httpRequest') {\n      const url = node.parameters?.url || '';\n      if (url.includes('openrouter.ai')) {\n        // Extract model from JSON body\n        const jsonBody = node.parameters?.jsonBody || '';\n        const modelMatch = jsonBody.match(/[\"']model[\"']\\s*:\\s*[\"']([^\"']+)[\"']/);\n        if (modelMatch) {\n          modelsFound.push({\n            model: modelMatch[1],\n            workflowId: workflow.id,\n            workflowName: workflow.name,\n            nodeName: node.name,\n            nodeType: 'HTTP Request'\n          });\n        }\n      }\n    }\n    \n    // Check OpenAI nodes with OpenRouter base URL in credentials\n    if (node.type === '@n8n/n8n-nodes-langchain.lmChatOpenAi') {\n      const model = node.parameters?.model;\n      // Flag these for manual review - might be using OpenRouter\n      if (model && model.includes('/')) {\n        modelsFound.push({\n          model,\n          workflowId: workflow.id,\n          workflowName: workflow.name,\n          nodeName: node.name,\n          nodeType: 'OpenAI (possible OpenRouter)'\n        });\n      }\n    }\n  }\n}\n\n// Deduplicate models\nconst uniqueModels = [...new Set(modelsFound.map(m => m.model))];\n\nreturn [{\n  json: {\n    totalWorkflows: workflows.length,\n    modelsFound,\n    uniqueModels\n  }\n}];"
+      },
+      "id": "extract-models",
+      "name": "Extract OpenRouter Models",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 100]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://models.dev/api.json",
+        "options": {}
+      },
+      "id": "fetch-models-dev",
+      "name": "Fetch models.dev API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare found models against OpenRouter available models\nconst modelsDevData = $input.first().json;\nconst extractedData = $('Extract OpenRouter Models').first().json;\n\n// Get all OpenRouter models from models.dev\nconst openrouterProvider = modelsDevData.openrouter || {};\nconst availableModels = Object.keys(openrouterProvider.models || {});\n\n// Also build a set of model IDs without provider prefix for fuzzy matching\nconst availableModelsSet = new Set(availableModels);\nconst availableModelsNormalized = new Set(\n  availableModels.map(m => m.toLowerCase())\n);\n\nconst results = [];\nconst deprecatedModels = [];\n\nfor (const found of extractedData.modelsFound) {\n  const modelId = found.model;\n  const modelLower = modelId.toLowerCase();\n  \n  // Check exact match\n  let isAvailable = availableModelsSet.has(modelId);\n  \n  // Check normalized match\n  if (!isAvailable) {\n    isAvailable = availableModelsNormalized.has(modelLower);\n  }\n  \n  // Check if model exists with different casing\n  if (!isAvailable) {\n    for (const available of availableModels) {\n      if (available.toLowerCase() === modelLower) {\n        isAvailable = true;\n        break;\n      }\n    }\n  }\n  \n  const result = {\n    ...found,\n    isAvailable,\n    status: isAvailable ? 'OK' : 'NOT FOUND'\n  };\n  \n  results.push(result);\n  \n  if (!isAvailable) {\n    deprecatedModels.push(result);\n  }\n}\n\nreturn [{\n  json: {\n    summary: {\n      totalWorkflows: extractedData.totalWorkflows,\n      totalModelsFound: extractedData.modelsFound.length,\n      uniqueModels: extractedData.uniqueModels.length,\n      deprecatedCount: deprecatedModels.length,\n      availableOnOpenRouter: availableModels.length\n    },\n    deprecatedModels,\n    allResults: results\n  }\n}];"
+      },
+      "id": "check-availability",
+      "name": "Check Model Availability",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-deprecated",
+              "leftValue": "={{ $json.summary.deprecatedCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-deprecated",
+      "name": "Has Deprecated Models?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format alert message\nconst data = $input.first().json;\nconst deprecated = data.deprecatedModels;\n\nlet message = `⚠️ **OpenRouter Model Alert**\\n\\n`;\nmessage += `Found ${deprecated.length} model(s) that may no longer be available on OpenRouter:\\n\\n`;\n\nfor (const model of deprecated) {\n  message += `• **${model.model}**\\n`;\n  message += `  └ Workflow: ${model.workflowName} (${model.workflowId})\\n`;\n  message += `  └ Node: ${model.nodeName} (${model.nodeType})\\n\\n`;\n}\n\nmessage += `\\n---\\nScanned ${data.summary.totalWorkflows} workflows.`;\nmessage += `\\nOpenRouter currently has ${data.summary.availableOnOpenRouter} models available.`;\n\nreturn [{\n  json: {\n    message,\n    deprecatedCount: deprecated.length,\n    deprecatedModels: deprecated\n  }\n}];"
+      },
+      "id": "format-alert",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No issues found\nconst data = $input.first().json;\n\nreturn [{\n  json: {\n    message: `✅ All ${data.summary.uniqueModels} OpenRouter models in use are still available.\\nScanned ${data.summary.totalWorkflows} workflows.`,\n    status: 'OK'\n  }\n}];"
+      },
+      "id": "format-ok",
+      "name": "All Models OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "content": "## OpenRouter Model Availability Monitor\n\nThis workflow scans all workflows on this n8n instance for OpenRouter model references and checks if they're still available.\n\n### Setup Required\n\n1. **Create HTTP Header Auth credential** named \"n8n API Key\":\n   - Header Name: `X-N8N-API-KEY`\n   - Header Value: Your n8n API key\n\n2. **Set environment variable** (optional):\n   - `N8N_API_URL`: Base URL of your n8n instance (defaults to http://localhost:5678)\n\n3. **Connect notification node** to \"Format Alert Message\" output:\n   - Slack, Email, Discord, etc.\n\n### What it detects\n\n- LangChain OpenRouter Chat Model nodes\n- HTTP Request nodes calling openrouter.ai API\n- OpenAI nodes that might be using OpenRouter (model IDs with /)",
+        "height": 420,
+        "width": 360
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-300, -100]
+    }
+  ],
+  "connections": {
+    "Weekly Check": {
+      "main": [
+        [
+          {
+            "node": "Get All Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Workflows": {
+      "main": [
+        [
+          {
+            "node": "Extract OpenRouter Models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract OpenRouter Models": {
+      "main": [
+        [
+          {
+            "node": "Fetch models.dev API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch models.dev API": {
+      "main": [
+        [
+          {
+            "node": "Check Model Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Model Availability": {
+      "main": [
+        [
+          {
+            "node": "Has Deprecated Models?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Deprecated Models?": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Models OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "monitoring"
+    },
+    {
+      "name": "openrouter"
+    }
+  ]
+}
