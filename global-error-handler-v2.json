@@ -74,8 +74,8 @@
           "value": "your-ops-repo",
           "mode": "name"
         },
-        "title": "={{ $(\"Extract Search Query\").item.json.ntfy.title }} — {{ $(\"Extract Search Query\").item.json.ntfy.message.split(\"\\n\")[0] }}",
-        "body": "=## Error Details\n\n{{ $(\"Extract Search Query\").item.json.ntfy.message }}\n\n## Links\n\n- [View Execution]({{ $(\"Extract Search Query\").item.json.ntfy.click }})\n\n---\n*Auto-created by N8N Global Error Handler*",
+        "title": "={{ $(\"Build Dedup Query\").item.json.ntfy.title }} — {{ $(\"Build Dedup Query\").item.json.ntfy.message.split(\"\\n\")[0] }}",
+        "body": "=## Error Details\n\n{{ $(\"Build Dedup Query\").item.json.ntfy.message }}\n\n## Links\n\n- [View Execution]({{ $(\"Build Dedup Query\").item.json.ntfy.click }})\n\n---\n*Auto-created by N8N Global Error Handler*",
         "labels": [],
         "assignees": []
       },
