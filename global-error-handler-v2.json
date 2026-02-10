@@ -1,47 +1,39 @@
 {
-  "name": "Global Error Handler v2",
+  "name": "Global error handler with GitHub Issues and push notifications",
   "nodes": [
     {
+      "parameters": {},
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
         -704,
-        -176
-      ],
-      "parameters": {}
+        -272
+      ]
     },
     {
+      "parameters": {
+        "jsCode": "const errorData = $input.all()[0].json;\nconst executionData = Array.isArray(errorData) ? errorData[0] : errorData;\nconst execution = executionData.execution;\nconst workflow = executionData.workflow;\nconst error = execution.error;\n\n// Extract all available info\nconst workflowName = workflow?.name || 'Unknown Workflow';\nconst workflowId = workflow?.id || '';\nconst executionId = execution?.id || 'Unknown';\nconst executionUrl = execution?.url || '';\nconst executionMode = execution?.mode || 'unknown';\n\nconst failedNode = error?.node?.name || 'Unknown Node';\nconst nodeType = error?.node?.type?.replace('n8n-nodes-base.', '') || 'unknown';\nconst errorType = error?.name || 'Unknown Error';\nconst errorMessage = error?.message || 'No error message available';\nconst timestamp = error?.timestamp || Date.now();\nconst itemIndex = error?.context?.itemIndex ?? error?.errorResponse?.context?.itemIndex;\n\n// Format for ntfy\nconst ntfyMessage = [\n  `Node: ${failedNode} (${nodeType})`,\n  `Error: ${errorType}`,\n  '',\n  errorMessage,\n  '',\n  itemIndex !== undefined ? `Item index: ${itemIndex}` : null,\n  `Mode: ${executionMode}`,\n  `Execution: ${executionId}`\n].filter(Boolean).join('\\n');\n\nconst ntfyTitle = `${workflowName}`;\nconst ntfyTags = errorType.includes('timeout') ? 'hourglass,warning'\n  : errorType.includes('Authentication') ? 'lock,warning'\n  : errorType.includes('rate') ? 'snail,warning'\n  : 'rotating_light,warning';\n\nreturn [{\n  json: {\n    ntfy: {\n      title: ntfyTitle,\n      message: ntfyMessage,\n      click: executionUrl,\n      tags: ntfyTags,\n      priority: 'high'\n    },\n    slack: {\n      text: ':warning: N8N Workflow Error Alert',\n      blocks: [\n        {\n          type: 'header',\n          text: { type: 'plain_text', text: 'Workflow Execution Failed' }\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Workflow:*\\n' + workflowName },\n            { type: 'mrkdwn', text: '*Execution ID:*\\n' + executionId },\n            { type: 'mrkdwn', text: '*Failed Node:*\\n' + failedNode },\n            { type: 'mrkdwn', text: '*Node Type:*\\n' + nodeType }\n          ]\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Error Type:*\\n' + errorType },\n            { type: 'mrkdwn', text: '*Mode:*\\n' + executionMode }\n          ]\n        },\n        {\n          type: 'section',\n          text: { type: 'mrkdwn', text: '*Error Message:*\\n`' + errorMessage + '`' }\n        },\n        ...(executionUrl ? [{\n          type: 'actions',\n          elements: [{\n            type: 'button',\n            text: { type: 'plain_text', text: 'View Execution' },\n            url: executionUrl,\n            style: 'primary'\n          }]\n        }] : []),\n        {\n          type: 'context',\n          elements: [{\n            type: 'mrkdwn',\n            text: 'Timestamp: <!date^' + Math.floor(timestamp / 1000) + '^{date_num} {time_secs}|' + new Date(timestamp).toISOString() + '>'\n          }]\n        }\n      ]\n    }\n  }\n}];\n"
+      },
       "name": "Format Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -464,
-        -176
-      ],
-      "parameters": {
-        "jsCode": "const errorData = $input.all()[0].json;\nconst executionData = Array.isArray(errorData) ? errorData[0] : errorData;\nconst execution = executionData.execution;\nconst workflow = executionData.workflow;\nconst error = execution.error;\n\n// Extract all available info\nconst workflowName = workflow?.name || 'Unknown Workflow';\nconst workflowId = workflow?.id || '';\nconst executionId = execution?.id || 'Unknown';\nconst executionUrl = execution?.url || '';\nconst executionMode = execution?.mode || 'unknown';\n\nconst failedNode = error?.node?.name || 'Unknown Node';\nconst nodeType = error?.node?.type?.replace('n8n-nodes-base.', '') || 'unknown';\nconst errorType = error?.name || 'Unknown Error';\nconst errorMessage = error?.message || 'No error message available';\nconst timestamp = error?.timestamp || Date.now();\nconst itemIndex = error?.context?.itemIndex ?? error?.errorResponse?.context?.itemIndex;\n\n// Format for ntfy\nconst ntfyMessage = [\n  `Node: ${failedNode} (${nodeType})`,\n  `Error: ${errorType}`,\n  '',\n  errorMessage,\n  '',\n  itemIndex !== undefined ? `Item index: ${itemIndex}` : null,\n  `Mode: ${executionMode}`,\n  `Execution: ${executionId}`\n].filter(Boolean).join('\\n');\n\nconst ntfyTitle = `${workflowName}`;\nconst ntfyTags = errorType.includes('timeout') ? 'hourglass,warning'\n  : errorType.includes('Authentication') ? 'lock,warning'\n  : errorType.includes('rate') ? 'snail,warning'\n  : 'rotating_light,warning';\n\nreturn [{\n  json: {\n    ntfy: {\n      title: ntfyTitle,\n      message: ntfyMessage,\n      click: executionUrl,\n      tags: ntfyTags,\n      priority: 'high'\n    },\n    slack: {\n      text: ':warning: N8N Workflow Error Alert',\n      blocks: [\n        {\n          type: 'header',\n          text: { type: 'plain_text', text: 'Workflow Execution Failed' }\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Workflow:*\\n' + workflowName },\n            { type: 'mrkdwn', text: '*Execution ID:*\\n' + executionId },\n            { type: 'mrkdwn', text: '*Failed Node:*\\n' + failedNode },\n            { type: 'mrkdwn', text: '*Node Type:*\\n' + nodeType }\n          ]\n        },\n        {\n          type: 'section',\n          fields: [\n            { type: 'mrkdwn', text: '*Error Type:*\\n' + errorType },\n            { type: 'mrkdwn', text: '*Mode:*\\n' + executionMode }\n          ]\n        },\n        {\n          type: 'section',\n          text: { type: 'mrkdwn', text: '*Error Message:*\\n`' + errorMessage + '`' }\n        },\n        ...(executionUrl ? [{\n          type: 'actions',\n          elements: [{\n            type: 'button',\n            text: { type: 'plain_text', text: 'View Execution' },\n            url: executionUrl,\n            style: 'primary'\n          }]\n        }] : []),\n        {\n          type: 'context',\n          elements: [{\n            type: 'mrkdwn',\n            text: 'Timestamp: <!date^' + Math.floor(timestamp / 1000) + '^{date_num} {time_secs}|' + new Date(timestamp).toISOString() + '>'\n          }]\n        }\n      ]\n    }\n  }\n}];\n"
-      }
+        -480,
+        -272
+      ]
     },
     {
-      "name": "Ntfy Notification",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -224,
-        -304
-      ],
       "parameters": {
         "method": "POST",
-        "url": "http://ntfy.kaiserlich.dev/big_alerts",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
+        "url": "https://ntfy.sh/your-n8n-alerts",
+        "authentication": "noAuthentication",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Title",
-              "value": "=[BIG] {{ $json.ntfy.title }}"
+              "value": "={{ $json.ntfy.title }}"
             },
             {
               "name": "Priority",
@@ -61,29 +53,161 @@
         "contentType": "raw",
         "body": "={{ $json.ntfy.message }}",
         "options": {}
-      }
+      },
+      "name": "Ntfy Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -256,
+        -176
+      ]
     },
     {
-      "name": "Slack Notification",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.3,
-      "position": [
-        -224,
-        -80
-      ],
       "parameters": {
-        "authentication": "oAuth2",
-        "select": "channel",
-        "channelId": {
+        "owner": {
           "__rl": true,
-          "value": "C08MJSJAB8U",
-          "mode": "list",
-          "cachedResultName": "big-monitoring"
+          "value": "your-org",
+          "mode": "name"
         },
-        "messageType": "block",
-        "blocksUi": "={{ $json.slack }}",
-        "otherOptions": {}
-      }
+        "repository": {
+          "__rl": true,
+          "value": "your-ops-repo",
+          "mode": "name"
+        },
+        "title": "={{ $(\"Extract Search Query\").item.json.ntfy.title }} — {{ $(\"Extract Search Query\").item.json.ntfy.message.split(\"\\n\")[0] }}",
+        "body": "=## Error Details\n\n{{ $(\"Extract Search Query\").item.json.ntfy.message }}\n\n## Links\n\n- [View Execution]({{ $(\"Extract Search Query\").item.json.ntfy.click }})\n\n---\n*Auto-created by N8N Global Error Handler*",
+        "labels": [],
+        "assignees": []
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        -368
+      ],
+      "name": "Create GitHub Issue",
+      "webhookId": "357968d3-4218-4c21-a8d0-2a0aeb73b598"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ntfy = $input.first().json.ntfy;\nconst workflowName = ntfy.title;\nconst nodeName = ntfy.message.split('\\n')[0].replace('Node: ', '').split(' (')[0];\n\n// Build GitHub search query to find existing open issues for same error\n// CUSTOMIZE: Change the repo below to match your ops/monitoring repo\nconst repo = 'your-org/your-ops-repo';\nconst searchQuery = 'repo:' + repo + ' is:issue is:open in:title \"' + workflowName + '\" in:title \"' + nodeName + '\"';\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    dedup: {\n      workflowName,\n      nodeName,\n      searchQuery\n    }\n  }\n}];"
+      },
+      "name": "Build Dedup Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/search/issues?q={{ encodeURIComponent($json.dedup.searchQuery) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "name": "Search Existing Issues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-count",
+              "leftValue": "={{ $json.total_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Is New Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Global Error Handler with GitHub Issues\n\nCentralized error handler that catches failures from any workflow, creates GitHub Issues for tracking, and sends push notifications via ntfy. Automatically deduplicates — if an open issue already exists for the same workflow + node, it skips creating a duplicate.\n\n### How it works\n1. **Error Trigger** fires when any linked workflow fails\n2. **Format Error** extracts workflow name, failed node, error type, message, and execution URL\n3. **Push notification** sent immediately via ntfy for real-time awareness\n4. **Deduplication** searches GitHub for existing open issues matching the same workflow + node\n5. **New errors only** get a GitHub Issue created with full error details and a link to the execution\n\n### Setup steps\n1. Set your **GitHub credential** on the \"Search Existing Issues\" and \"Create GitHub Issue\" nodes\n2. Update the **repo name** in the \"Build Dedup Query\" code node and the \"Create GitHub Issue\" node\n3. Set your **ntfy topic URL** on the notification node (or remove it if you don't need push alerts)\n4. On every other workflow: Settings → Error Workflow → select this workflow\n\n### Customization\n- Replace ntfy with Slack, email, Telegram, or any webhook\n- Add labels to auto-created issues (e.g. `n8n-error`, `auto-created`)\n- Adjust the dedup search query to match on different fields",
+        "height": 620,
+        "width": 480,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1140,
+        -520
+      ],
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Parse Error",
+        "height": 200,
+        "width": 280
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -500,
+        -372
+      ],
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Push Notification",
+        "height": 200,
+        "width": 280
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -276,
+        -276
+      ],
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Dedup & Create Issue",
+        "height": 200,
+        "width": 700
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -308,
+        -468
+      ],
+      "name": "Sticky Note3"
     }
   ],
   "connections": {
@@ -107,7 +231,41 @@
             "index": 0
           },
           {
-            "node": "Slack Notification",
+            "node": "Build Dedup Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Existing Issues": {
+      "main": [
+        [
+          {
+            "node": "Is New Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Error?": {
+      "main": [
+        [
+          {
+            "node": "Create GitHub Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Dedup Query": {
+      "main": [
+        [
+          {
+            "node": "Search Existing Issues",
             "type": "main",
             "index": 0
           }

@@ -2,7 +2,7 @@
   "name": "Monitor - Missing Error Handlers",
   "nodes": [
     {
-      "name": "Every 2 mins (testing)",
+      "name": "Daily Check at 9am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -13,8 +13,8 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 2
+              "field": "hours",
+              "hour": 9
             }
           ]
         }
@@ -97,20 +97,52 @@
         112
       ],
       "parameters": {}
+    },
+    {
+      "parameters": {
+        "content": "## Monitor — Missing Error Handlers\n\nEnsures every active workflow with a trigger has an Error Workflow configured. Catches workflows that would fail silently because nobody wired up error handling. Pair with a Global Error Handler workflow for full coverage.\n\n### How it works\n1. Fetches all active workflows via the n8n API\n2. Filters to workflows that have a trigger node (schedule, webhook, email, etc.)\n3. Skips archived workflows and those tagged `skip-monitoring`\n4. Checks if each workflow has an `errorWorkflow` set in its settings\n5. If any are missing → raises an error listing them all\n\n### Setup steps\n1. Add your **n8n API credential** to the \"Get Active Workflows\" node\n2. Tag this workflow with `skip-monitoring` so it skips itself\n3. Set an **Error Workflow** in this workflow's settings to get alerted\n4. Activate the workflow\n\n### Customization\n- Change the schedule (default: daily at 9am)\n- Edit the `skipTag` variable in the Code node to use a different exclusion tag\n- Add or remove trigger types from the `triggerTypes` array",
+        "height": 530,
+        "width": 460,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1020,
+        -220
+      ],
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Discovery & Check",
+        "height": 200,
+        "width": 520
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        -100
+      ],
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Alert or OK",
+        "height": 360,
+        "width": 280
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        -196
+      ],
+      "name": "Sticky Note2"
     }
   ],
   "connections": {
-    "Every 2 mins (testing)": {
-      "main": [
-        [
-          {
-            "node": "Get Active Workflows",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Get Active Workflows": {
       "main": [
         [
@@ -145,6 +177,17 @@
         [
           {
             "node": "All Good",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Check at 9am": {
+      "main": [
+        [
+          {
+            "node": "Get Active Workflows",
             "type": "main",
             "index": 0
           }
