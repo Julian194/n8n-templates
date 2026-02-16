@@ -16,7 +16,8 @@
         "rule": {
           "interval": [
             {
-              "field": "hours"
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
             }
           ]
         }
@@ -27,7 +28,7 @@
         -464,
         -496
       ],
-      "name": "Daily Check at 9am"
+      "name": "Daily 9am"
     },
     {
       "parameters": {
@@ -44,7 +45,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// CONFIG — Adjust these values to fit your setup\n// ============================================================\n\n// Optional: restrict to a specific n8n project ID.\n// Leave empty to monitor ALL active workflows.\nconst PROJECT_ID = '';\n\n// Tag name to exclude workflows from monitoring.\nconst SKIP_TAG = 'skip-monitoring';\n\n// ============================================================\n// AUTO-DISCOVERY — No changes needed below\n// ============================================================\n\nconst workflows = $input.all().map(i => i.json);\nconst results = [];\n\nfor (const wf of workflows) {\n  if (wf.isArchived) continue;\n\n  // Project filter\n  if (PROJECT_ID) {\n    const wfProject = wf.shared?.[0]?.projectId;\n    if (wfProject !== PROJECT_ID) continue;\n  }\n\n  // Tag filter\n  const tags = (wf.tags || []).map(t => (t.name || t).toString().toLowerCase());\n  if (tags.includes(SKIP_TAG)) continue;\n\n  // Find trigger nodes\n  const nodes = wf.nodes || [];\n  const scheduleTrigger = nodes.find(n => n.type === 'n8n-nodes-base.scheduleTrigger');\n  const pollingTrigger = nodes.find(n =>\n    n.type.includes('Trigger') &&\n    n.type !== 'n8n-nodes-base.manualTrigger' &&\n    n.type !== 'n8n-nodes-base.executeWorkflowTrigger' &&\n    n.type !== 'n8n-nodes-base.errorTrigger' &&\n    n.type !== 'n8n-nodes-base.scheduleTrigger' &&\n    n.parameters?.pollTimes\n  );\n\n  if (!scheduleTrigger && !pollingTrigger) continue;\n\n  // Calculate max allowed age before alerting\n  let maxAgeHours = 48; // safe default\n\n  if (scheduleTrigger) {\n    const interval = scheduleTrigger.parameters?.rule?.interval?.[0];\n    if (interval) {\n      if (interval.field === 'cronExpression' && interval.expression) {\n        maxAgeHours = parseCronMaxAge(interval.expression);\n      } else if (interval.field === 'minutes') {\n        const mins = interval.minutesInterval || 30;\n        maxAgeHours = Math.max(2, Math.ceil(mins * 8 / 60));\n      } else if (interval.field === 'hours') {\n        maxAgeHours = 48;\n      } else if (interval.field === 'weeks') {\n        maxAgeHours = 192; // 8 days\n      } else if (interval.field === 'months') {\n        maxAgeHours = 840; // 35 days\n      } else {\n        maxAgeHours = 48;\n      }\n    }\n  }\n\n  results.push({ json: { workflowId: wf.id, name: wf.name, maxAgeHours } });\n}\n\nfunction parseCronMaxAge(expr) {\n  const parts = expr.trim().split(/\\s+/);\n  if (parts.length < 5) return 48;\n  const [min, hour, dom, month, dow] = parts;\n\n  // Monthly (e.g. \"0 9 1 * *\")\n  if (dom !== '*' && !dom.startsWith('*/')) return 840;\n  // Weekday-only (e.g. \"0 8,13,18 * * 1-5\") — 48h covers weekends\n  if (dow !== '*') return 48;\n  // Every N days (e.g. \"0 9 */2 * *\")\n  if (dom.startsWith('*/')) {\n    const n = parseInt(dom.split('/')[1]) || 1;\n    return Math.max(48, n * 36);\n  }\n  // Sub-hourly (e.g. \"*/15 8-17 * * *\")\n  if (min.startsWith('*/')) return 48;\n  // Daily\n  return 48;\n}\n\nreturn results;"
+        "jsCode": "// ============================================================\n// CONFIG — Adjust these values to fit your setup\n// ============================================================\n\n// Optional: restrict to a specific n8n project ID.\n// Leave empty to monitor ALL active workflows.\nconst PROJECT_ID = '';\n\n// Tag name to exclude workflows from monitoring.\nconst SKIP_TAG = 'skip-monitoring';\n\n// ============================================================\n// AUTO-DISCOVERY — No changes needed below\n// ============================================================\n\nconst workflows = $input.all().map(i => i.json);\nconst results = [];\n\nfor (const wf of workflows) {\n  if (wf.isArchived) continue;\n\n  // Project filter\n  if (PROJECT_ID) {\n    const wfProject = wf.shared?.[0]?.projectId;\n    if (wfProject !== PROJECT_ID) continue;\n  }\n\n  // Tag filter\n  const tags = (wf.tags || []).map(t => (t.name || t).toString().toLowerCase());\n  if (tags.includes(SKIP_TAG)) continue;\n\n  // Find trigger nodes\n  const nodes = wf.nodes || [];\n  const scheduleTrigger = nodes.find(n => n.type === 'n8n-nodes-base.scheduleTrigger');\n  const pollingTrigger = nodes.find(n =>\n    n.type.includes('Trigger') &&\n    n.type !== 'n8n-nodes-base.manualTrigger' &&\n    n.type !== 'n8n-nodes-base.executeWorkflowTrigger' &&\n    n.type !== 'n8n-nodes-base.errorTrigger' &&\n    n.type !== 'n8n-nodes-base.scheduleTrigger' &&\n    n.parameters?.pollTimes\n  );\n\n  if (!scheduleTrigger && !pollingTrigger) continue;\n\n  // Calculate max allowed age before alerting\n  let maxAgeHours = 48; // safe default: 2 days\n\n  if (scheduleTrigger) {\n    const interval = scheduleTrigger.parameters?.rule?.interval?.[0];\n    if (interval) {\n      if (interval.field === 'cronExpression' && interval.expression) {\n        maxAgeHours = parseCronMaxAge(interval.expression);\n      } else if (interval.field === 'minutes') {\n        const mins = interval.minutesInterval || 30;\n        maxAgeHours = Math.max(2, Math.ceil(mins * 8 / 60));\n      } else if (interval.field === 'hours') {\n        maxAgeHours = 48;\n      } else if (interval.field === 'weeks') {\n        maxAgeHours = 192; // 8 days\n      } else if (interval.field === 'months') {\n        maxAgeHours = 840; // 35 days\n      } else {\n        // default daily: {triggerAtHour: N}\n        maxAgeHours = 48;\n      }\n    }\n  }\n\n  // polling triggers get default 48h\n  results.push({ json: { workflowId: wf.id, name: wf.name, maxAgeHours } });\n}\n\nfunction parseCronMaxAge(expr) {\n  const parts = expr.trim().split(/\\s+/);\n  if (parts.length < 5) return 48;\n\n  // Support both 5-part and 6-part cron by reading the last 5 fields\n  const [min, hour, dom, month, dow] = parts.slice(-5);\n  const normalizedDow = String(dow || '').toLowerCase();\n\n  // Monthly (specific day-of-month, no day-of-week restriction)\n  if (dom !== '*' && !dom.startsWith('*/') && (dow === '*' || dow === '?')) {\n    return 840; // 35 days\n  }\n\n  // Day-of-week schedules\n  if (dow !== '*' && dow !== '?') {\n    // Weekday schedules can naturally have a ~72h weekend gap\n    if (\n      normalizedDow === '1-5' ||\n      normalizedDow === 'mon-fri' ||\n      normalizedDow === '1,2,3,4,5'\n    ) {\n      return 96; // 4 days\n    }\n\n    // Single/multi-day weekly schedules\n    return 192; // 8 days\n  }\n\n  // Every N days\n  if (dom.startsWith('*/')) {\n    const n = parseInt(dom.split('/')[1], 10) || 1;\n    return Math.max(48, n * 36);\n  }\n\n  // Sub-hourly schedules (e.g. */15 * * * *)\n  if (min.startsWith('*/')) return 48;\n\n  // Daily default\n  return 48;\n}\n\nreturn results;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -213,17 +214,6 @@
         ]
       ]
     },
-    "Daily Check at 9am": {
-      "main": [
-        [
-          {
-            "node": "Fetch All Active Workflows",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch All Active Workflows": {
       "main": [
         [
@@ -280,6 +270,17 @@
         [
           {
             "node": "All Healthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 9am": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Active Workflows",
             "type": "main",
             "index": 0
           }
