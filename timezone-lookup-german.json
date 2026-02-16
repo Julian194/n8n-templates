@@ -25,7 +25,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://api.geonames.org/searchJSON?q={{ encodeURIComponent($json.city) }}&country={{ $json.countryCode }}&maxRows=1&username=jksr",
+        "url": "=http://api.geonames.org/searchJSON?q={{ encodeURIComponent($json.city) }}&country={{ $json.countryCode }}&maxRows=1&username=YOUR_GEONAMES_USERNAME",
         "options": {}
       },
       "id": "search-city",
@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=http://api.geonames.org/timezoneJSON?lat={{ $json.geonames[0].lat }}&lng={{ $json.geonames[0].lng }}&username=jksr",
+        "url": "=http://api.geonames.org/timezoneJSON?lat={{ $json.geonames[0].lat }}&lng={{ $json.geonames[0].lng }}&username=YOUR_GEONAMES_USERNAME",
         "options": {}
       },
       "id": "get-timezone",

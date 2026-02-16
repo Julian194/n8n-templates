@@ -2,7 +2,7 @@
   "name": "Monitor - Missing Error Handlers",
   "nodes": [
     {
-      "name": "Daily Check at 9am",
+      "name": "Daily 9am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -13,8 +13,8 @@
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hour": 9
+              "field": "days",
+              "triggerAtHour": 9
             }
           ]
         }
@@ -29,8 +29,12 @@
         0
       ],
       "parameters": {
-        "filters": {},
-        "requestOptions": {}
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "active": true
+        }
       }
     },
     {
@@ -183,7 +187,7 @@
         ]
       ]
     },
-    "Daily Check at 9am": {
+    "Daily 9am": {
       "main": [
         [
           {

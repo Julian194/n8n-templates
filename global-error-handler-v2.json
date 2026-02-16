@@ -74,8 +74,8 @@
           "value": "your-ops-repo",
           "mode": "name"
         },
-        "title": "={{ $(\"Build Dedup Query\").item.json.ntfy.title }} — {{ $(\"Build Dedup Query\").item.json.ntfy.message.split(\"\\n\")[0] }}",
-        "body": "=## Error Details\n\n{{ $(\"Build Dedup Query\").item.json.ntfy.message }}\n\n## Links\n\n- [View Execution]({{ $(\"Build Dedup Query\").item.json.ntfy.click }})\n\n---\n*Auto-created by N8N Global Error Handler*",
+        "title": "={{ $(\"Build Dedup Query\").item.json.ntfy.title }} \u2014 {{ $(\"Build Dedup Query\").item.json.ntfy.message.split(\"\\n\")[0] }}",
+        "body": "=## Error Details\n\n{{ $(\"Build Dedup Query\").item.json.ntfy.message }}\n\n## Links\n\n- [View Execution]({{ $(\"Build Dedup Query\").item.json.ntfy.click }})\n\n## Dedup\n\n- Root: `{{ $(\"Build Dedup Query\").item.json.dedup.rootFingerprint }}`\n- Local: `{{ $(\"Build Dedup Query\").item.json.dedup.localFingerprint }}`\n\n---\n*Auto-created by N8N Global Error Handler*\n<!-- {{ $(\"Build Dedup Query\").item.json.dedup.rootToken }} -->\n<!-- {{ $(\"Build Dedup Query\").item.json.dedup.localToken }} -->",
         "labels": [],
         "assignees": []
       },
@@ -86,11 +86,12 @@
         -368
       ],
       "name": "Create GitHub Issue",
-      "webhookId": "357968d3-4218-4c21-a8d0-2a0aeb73b598"
+      "webhookId": "357968d3-4218-4c21-a8d0-2a0aeb73b598",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const ntfy = $input.first().json.ntfy;\nconst workflowName = ntfy.title;\nconst nodeName = ntfy.message.split('\\n')[0].replace('Node: ', '').split(' (')[0];\n\n// Build GitHub search query to find existing open issues for same error\n// CUSTOMIZE: Change the repo below to match your ops/monitoring repo\nconst repo = 'your-org/your-ops-repo';\nconst searchQuery = 'repo:' + repo + ' is:issue is:open in:title \"' + workflowName + '\" in:title \"' + nodeName + '\"';\n\nreturn [{\n  json: {\n    ...$input.first().json,\n    dedup: {\n      workflowName,\n      nodeName,\n      searchQuery\n    }\n  }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst ntfy = input.ntfy || {};\nconst workflowName = ntfy.title || 'Unknown Workflow';\nconst lines = (ntfy.message || '').split('\\n');\n\nconst nodeLine = lines.find(l => l.startsWith('Node: ')) || '';\nconst errorTypeLine = lines.find(l => l.startsWith('Error: ')) || '';\n\nconst nodePart = nodeLine.replace('Node: ', '').trim();\nconst nodeName = (nodePart.split(' (')[0] || 'Unknown Node').trim();\nconst errorType = (errorTypeLine.replace('Error: ', '').trim() || 'UnknownError');\n\nconst metadataPrefixes = ['Node: ', 'Error: ', 'Item index:', 'Mode:', 'Execution:'];\nconst rawMessage = lines\n  .map(l => l.trim())\n  .filter(l => l.length > 0 && !metadataPrefixes.some(prefix => l.startsWith(prefix)))\n  .join(' ');\n\nconst normalize = (text) => String(text || '')\n  .toLowerCase()\n  .replace(/gid:\\/\\/shopify\\/[a-z]+\\/[0-9]+/g, 'gid://shopify/<id>')\n  .replace(/\\brec[a-z0-9]{14,}\\b/gi, '<airtable_id>')\n  .replace(/\\b[0-9]{4,}\\b/g, '<num>')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst normalizedMessage = normalize(rawMessage || 'unknown-error');\n\nconst hash = (str) => {\n  let h = 0x811c9dc5;\n  for (let i = 0; i < str.length; i++) {\n    h ^= str.charCodeAt(i);\n    h = (h * 0x01000193) >>> 0;\n  }\n  return h.toString(16).padStart(8, '0');\n};\n\nconst rootFingerprint = `err-root-${hash(normalizedMessage)}`;\nconst localFingerprint = `err-local-${hash(`${workflowName}|${nodeName}|${normalizedMessage}`)}`;\nconst rootToken = `dedup-root:${rootFingerprint}`;\nconst localToken = `dedup-local:${localFingerprint}`;\nconst sinceDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);\n\n// CUSTOMIZE THIS REPO FOR YOUR SETUP\nconst repo = 'your-org/your-ops-repo';\nconst searchQuery = `repo:${repo} is:issue created:>=${sinceDate}`;\n\nreturn [{\n  json: {\n    ...input,\n    dedup: {\n      repo,\n      workflowName,\n      nodeName,\n      errorType,\n      normalizedMessage,\n      rootFingerprint,\n      localFingerprint,\n      rootToken,\n      localToken,\n      sinceDate,\n      searchQuery\n    }\n  }\n}];"
       },
       "name": "Build Dedup Query",
       "type": "n8n-nodes-base.code",
@@ -98,11 +99,12 @@
       "position": [
         -288,
         -368
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/search/issues?q={{ encodeURIComponent($json.dedup.searchQuery) }}",
+        "url": "=https://api.github.com/search/issues?q={{ encodeURIComponent($json.dedup.searchQuery) }}&sort=created&order=desc&per_page=100",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "githubApi",
         "options": {
@@ -119,7 +121,8 @@
       "position": [
         -80,
         -368
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -131,11 +134,11 @@
           },
           "conditions": [
             {
-              "id": "check-count",
-              "leftValue": "={{ $json.total_count }}",
-              "rightValue": 0,
+              "id": "check-is-duplicate",
+              "leftValue": "={{ $json.dedup.isDuplicate }}",
+              "rightValue": false,
               "operator": {
-                "type": "number",
+                "type": "boolean",
                 "operation": "equals"
               }
             }
@@ -150,11 +153,12 @@
       "position": [
         128,
         -368
-      ]
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## Global Error Handler with GitHub Issues\n\nCentralized error handler that catches failures from any workflow, creates GitHub Issues for tracking, and sends push notifications via ntfy. Automatically deduplicates — if an open issue already exists for the same workflow + node, it skips creating a duplicate.\n\n### How it works\n1. **Error Trigger** fires when any linked workflow fails\n2. **Format Error** extracts workflow name, failed node, error type, message, and execution URL\n3. **Push notification** sent immediately via ntfy for real-time awareness\n4. **Deduplication** searches GitHub for existing open issues matching the same workflow + node\n5. **New errors only** get a GitHub Issue created with full error details and a link to the execution\n\n### Setup steps\n1. Set your **GitHub credential** on the \"Search Existing Issues\" and \"Create GitHub Issue\" nodes\n2. Update the **repo name** in the \"Build Dedup Query\" code node and the \"Create GitHub Issue\" node\n3. Set your **ntfy topic URL** on the notification node (or remove it if you don't need push alerts)\n4. On every other workflow: Settings → Error Workflow → select this workflow\n\n### Customization\n- Replace ntfy with Slack, email, Telegram, or any webhook\n- Add labels to auto-created issues (e.g. `n8n-error`, `auto-created`)\n- Adjust the dedup search query to match on different fields",
+        "content": "## Global Error Handler with GitHub Issues\n\nCatches workflow errors, sends ntfy immediately, deduplicates against recent issues, and comments on existing issues instead of spamming new ones.\n\n### Features\n- Immediate push notification (independent path)\n- Dedup by fingerprint tokens + title fallback\n- Searches open + recently closed issues (last 14d)\n- 30-minute cooldown for duplicate comments\n- GitHub branch uses continue-on-error so notifications still send if GitHub is down\n\n### Setup\n1. Set GitHub credential on GitHub nodes\n2. Change `repo` in **Build Dedup Query**\n3. Set your ntfy topic URL\n4. Configure this as Error Workflow on other workflows",
         "height": 620,
         "width": 480,
         "color": 4
@@ -208,6 +212,126 @@
         -468
       ],
       "name": "Sticky Note3"
+    },
+    {
+      "name": "Find Existing Issue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -368
+      ],
+      "parameters": {
+        "jsCode": "const search = $input.first().json;\nconst base = $('Build Dedup Query').item.json;\nconst dedup = base.dedup || {};\n\nconst wf = String(dedup.workflowName || '').toLowerCase();\nconst node = String(dedup.nodeName || '').toLowerCase();\nconst rootToken = String(dedup.rootToken || '').toLowerCase();\nconst localToken = String(dedup.localToken || '').toLowerCase();\n\nconst issues = search.items || [];\nconst matches = issues.filter(issue => {\n  const title = String(issue.title || '').toLowerCase();\n  const body = String(issue.body || '').toLowerCase();\n  const tokenMatch = (rootToken && body.includes(rootToken)) || (localToken && body.includes(localToken));\n  const titleMatch = (!!wf && !!node && title.includes(wf) && title.includes(node));\n  return tokenMatch || titleMatch;\n});\n\nconst openMatch = matches.find(i => i.state === 'open');\nconst existing = openMatch || matches[0] || null;\n\nreturn [{\n  json: {\n    ...base,\n    dedup: {\n      ...dedup,\n      searchItemsCount: issues.length,\n      matchCount: matches.length,\n      isDuplicate: !!existing,\n      existingIssueNumber: existing?.number ?? null,\n      existingIssueState: existing?.state ?? null,\n      existingIssueUrl: existing?.html_url ?? null,\n      existingIssueTitle: existing?.title ?? null\n    }\n  }\n}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Prepare Existing Issue Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst issueNumber = data.dedup?.existingIssueNumber;\nif (!issueNumber) return [];\n\nconst lines = String(data.ntfy?.message || '').split('\\n').filter(Boolean);\nconst executionLine = lines.find(l => l.startsWith('Execution:')) || '';\nconst execId = executionLine.replace('Execution:', '').trim() || 'unknown';\nconst errorLine = lines.find(l => l.startsWith('Error:')) || 'Error: unknown';\nconst nodeLine = lines.find(l => l.startsWith('Node:')) || 'Node: unknown';\nconst localFingerprint = data.dedup?.localFingerprint || 'n/a';\nconst rootFingerprint = data.dedup?.rootFingerprint || 'n/a';\nconst marker = `<!-- dedup-auto-comment local:${localFingerprint} -->`;\n\nconst commentBody = [\n  'Duplicate error observed (deduplicated by Global Error Handler).',\n  '',\n  `- ${errorLine}`,\n  `- ${nodeLine}`,\n  `- Execution: ${execId}`,\n  data.ntfy?.click ? `- [View Execution](${data.ntfy.click})` : null,\n  '',\n  `Root fingerprint: \\`${rootFingerprint}\\``,\n  `Local fingerprint: \\`${localFingerprint}\\``,\n  marker\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...data,\n    existingIssueNumber: issueNumber,\n    existingIssueUrl: data.dedup?.existingIssueUrl || null,\n    commentBody,\n    dedupCommentMarker: marker,\n    dedupCommentWindowMinutes: 30\n  }\n}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Fetch Existing Issue Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        752,
+        -240
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $json.dedup.repo }}/issues/{{ $json.existingIssueNumber }}/comments?per_page=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Apply Comment Throttle (30m)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const base = $('Prepare Existing Issue Comment').item.json;\nconst marker = base.dedupCommentMarker || '';\nconst windowMin = Number(base.dedupCommentWindowMinutes || 30);\nconst windowMs = windowMin * 60 * 1000;\nconst now = Date.now();\n\nconst all = $input.all().map(i => i.json);\nlet comments = [];\nif (all.length === 1 && Array.isArray(all[0])) comments = all[0];\nelse comments = all;\n\nconst recent = comments.find(c => {\n  const body = String(c?.body || '');\n  const created = c?.created_at ? Date.parse(c.created_at) : NaN;\n  if (!body.includes(marker)) return false;\n  if (Number.isNaN(created)) return false;\n  return (now - created) < windowMs;\n});\n\nreturn [{\n  json: {\n    ...base,\n    shouldComment: !recent,\n    throttle: {\n      windowMinutes: windowMin,\n      blockedByCommentId: recent?.id ?? null,\n      blockedByCreatedAt: recent?.created_at ?? null,\n      checkedComments: comments.length\n    }\n  }\n}];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Comment Cooldown Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1184,
+        -240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d71f809d-aa12-4ba2-b3b8-32b646b3ded9",
+              "leftValue": "={{ $json.shouldComment }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "name": "Comment Existing Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1408,
+        -240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.github.com/repos/{{ $json.dedup.repo }}/issues/{{ $json.existingIssueNumber }}/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.commentBody }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -242,7 +366,7 @@
       "main": [
         [
           {
-            "node": "Is New Error?",
+            "node": "Find Existing Issue",
             "type": "main",
             "index": 0
           }
@@ -258,7 +382,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Prepare Existing Issue Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Dedup Query": {
@@ -270,6 +400,62 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Find Existing Issue": {
+      "main": [
+        [
+          {
+            "node": "Is New Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Existing Issue Comment": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing Issue Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing Issue Comments": {
+      "main": [
+        [
+          {
+            "node": "Apply Comment Throttle (30m)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Comment Throttle (30m)": {
+      "main": [
+        [
+          {
+            "node": "Comment Cooldown Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment Cooldown Passed?": {
+      "main": [
+        [
+          {
+            "node": "Comment Existing Issue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },
